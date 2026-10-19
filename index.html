@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Overexplained Side by Side</title>
+<style>
+  :root { --bg:#0A1626; --panel:#0f2034; --line:#24405f; --fg:#eef3f8; --muted:#9db0c4; --accent:#FF7A1A; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font-family: "Segoe UI", system-ui, -apple-system, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .bar h1 { font-size: 16px; margin: 0 12px 0 0; letter-spacing: .02em; }
+  .bar h1 span { color: var(--accent); }
+  button { background: #18304b; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.on { background: var(--accent); border-color: var(--accent); color: #111; font-weight: 600; }
+  .group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-right: 2px; }
+  #scrub { flex: 1 1 220px; accent-color: var(--accent); min-width: 0; }
+  #clock { font-family: Consolas, ui-monospace, monospace; font-size: 13px; color: var(--muted); min-width: 70px; text-align: right; }
+  .grid { flex: 1; display: grid; gap: 14px; padding: 14px 16px; min-height: 0; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 8px; min-height: 0; min-width: 0; }
+  .head { width: 100%; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .head b { font-size: 14px; }
+  .head small { font-family: Consolas, ui-monospace, monospace; font-size: 11px; color: var(--accent); text-align: right; }
+  .vbox { flex: 1; min-height: 0; width: 100%; display: flex; justify-content: center; }
+  video, .wait { height: 100%; max-width: 100%; aspect-ratio: 9 / 16; background: #000; border-radius: 6px; outline: 2px solid transparent; }
+  .wait { display: flex; align-items: center; justify-content: center; text-align: center; padding: 12px; border: 1px dashed var(--line); background: transparent; color: var(--muted); font-family: Consolas, ui-monospace, monospace; font-size: 12px; }
+  .cell.heard video { outline-color: var(--accent); }
+  .foot { font-size: 11px; color: var(--muted); font-family: Consolas, ui-monospace, monospace; text-align: center; }
+  .help { font-size: 12px; color: var(--muted); padding: 0 16px 10px; }
+  @media (max-width: 900px) {
+    body { height: auto; }
+    .grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+    video, .wait { height: auto; width: 100%; }
+  }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <h1><span>Overexplained</span> · side by side</h1>
+    <div class="group" id="tabs"></div>
+    <div class="group">
+      <button id="play">Play all</button>
+      <button id="restart">Restart all</button>
+    </div>
+    <div class="group" id="sound"><span class="label">Sound</span></div>
+    <input id="scrub" type="range" min="0" max="1000" value="0" aria-label="Seek all videos">
+    <span id="clock">0.0 s</span>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="help">Web copies (720×1280). Space = play / pause all · ← → = 1 second · 1-5 = hear that video · tap a video for its own controls</div>
+<script>
+const SETS = {
+  wb: { name: "Workbench drafts", vids: [
+    { file: "wb_E01.mp4", title: "E01 Cherenkov",    ver: "workbench · no VO yet" },
+    { file: "wb_E04.mp4", title: "E04 Lake Nyos",    ver: "workbench" },
+    { file: "wb_E05.mp4", title: "E05 Road Lines",   ver: "workbench · new car" },
+    { file: "wb_E06.mp4", title: "E06 Bridge Ice",   ver: "workbench · with crash" },
+    { file: "wb_E07.mp4", title: "E07 Sand Barrels", ver: "workbench · new car" },
+  ]},
+  final: { name: "Final (Cycles)", vids: [
+    { file: "E04_Lake_Nyos.mp4",    title: "E04 Lake Nyos",    ver: "v1 · Oct 18" },
+    { file: "E05_Road_Lines.mp4",   title: "E05 Road Lines",   ver: "v3 · truck fixed" },
+    { file: "E06_Bridge_Ice.mp4",   title: "E06 Bridge Ice",   ver: "v3 · daytime" },
+    { file: "E07_Sand_Barrels.mp4", title: "E07 Sand Barrels", ver: "v1 · Oct 18" },
+  ]},
+};
+const grid = document.getElementById("grid"), soundBox = document.getElementById("sound");
+let vids = [], heard = 0;
+function build(key) {
+  history.replaceState(null, "", "#" + key);
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.k === key));
+  vids.forEach(v => v.el && v.el.pause());
+  const list = SETS[key].vids;
+  grid.style.gridTemplateColumns = `repeat(${list.length}, minmax(0, 1fr))`;
+  grid.innerHTML = ""; soundBox.querySelectorAll("button").forEach(b => b.remove());
+  vids = list.map((v, i) => {
+    const cell = document.createElement("div"); cell.className = "cell";
+    cell.innerHTML = `<div class="head"><b>${v.title}</b><small>${v.ver}</small></div>
+      <div class="vbox"><video src="${v.file}" controls preload="metadata" playsinline></video></div>
+      <div class="foot">–</div>`;
+    grid.appendChild(cell);
+    const el = cell.querySelector("video"), foot = cell.querySelector(".foot");
+    const rec = { el, cell };
+    el.addEventListener("loadedmetadata", () => { foot.textContent = el.duration.toFixed(1) + " s"; });
+    el.addEventListener("error", () => {
+      const w = document.createElement("div"); w.className = "wait"; w.textContent = "not uploaded yet";
+      el.replaceWith(w); foot.textContent = v.file; rec.el = null;
+    });
+    const b = document.createElement("button"); b.dataset.i = i; b.textContent = v.title.split(" ")[0]; soundBox.appendChild(b);
+    return rec;
+  });
+  const off = document.createElement("button"); off.dataset.i = -1; off.textContent = "Off"; soundBox.appendChild(off);
+  setSound(0);
+}
+function live() { return vids.filter(v => v.el); }
+function setSound(i) {
+  heard = i;
+  vids.forEach((v, k) => { if (v.el) v.el.muted = k !== i; v.cell.classList.toggle("heard", k === i); });
+  soundBox.querySelectorAll("button").forEach(b => b.classList.toggle("on", +b.dataset.i === i));
+}
+const tabs = document.getElementById("tabs");
+Object.entries(SETS).forEach(([k, s]) => { const b = document.createElement("button"); b.dataset.k = k; b.textContent = s.name; tabs.appendChild(b); });
+tabs.addEventListener("click", e => { if (e.target.dataset.k) build(e.target.dataset.k); });
+soundBox.addEventListener("click", e => { if (e.target.dataset.i !== undefined) setSound(+e.target.dataset.i); });
+const playBtn = document.getElementById("play");
+function anyPlaying() { return live().some(v => !v.el.paused && !v.el.ended); }
+function playAll() { live().forEach(v => { v.el.play().catch(() => {}); }); }
+function pauseAll() { live().forEach(v => v.el.pause()); }
+function toggle() { anyPlaying() ? pauseAll() : playAll(); }
+playBtn.onclick = toggle;
+document.getElementById("restart").onclick = () => { live().forEach(v => { v.el.currentTime = 0; }); playAll(); };
+const maxDur = () => Math.max(0, ...live().map(v => v.el.duration || 0)) || 1;
+const scrub = document.getElementById("scrub"), clock = document.getElementById("clock");
+let dragging = false;
+scrub.addEventListener("input", () => {
+  dragging = true;
+  const t = scrub.value / 1000 * maxDur();
+  live().forEach(v => { v.el.currentTime = Math.min(t, (v.el.duration || t) - 0.05); });
+  clock.textContent = t.toFixed(1) + " s";
+});
+scrub.addEventListener("change", () => { dragging = false; });
+(function tick() {
+  const L = live(), lead = (vids[heard] && vids[heard].el) || (L[0] && L[0].el);
+  if (lead && !dragging) { scrub.value = Math.round(lead.currentTime / maxDur() * 1000); clock.textContent = lead.currentTime.toFixed(1) + " s"; }
+  playBtn.textContent = anyPlaying() ? "Pause all" : "Play all";
+  requestAnimationFrame(tick);
+})();
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" && e.target.type !== "range") return;
+  if (e.code === "Space") { e.preventDefault(); toggle(); }
+  else if (e.code === "ArrowRight" || e.code === "ArrowLeft") {
+    e.preventDefault(); const d = e.code === "ArrowRight" ? 1 : -1;
+    live().forEach(v => { v.el.currentTime = Math.max(0, v.el.currentTime + d); });
+  } else if (/^Digit[1-5]$/.test(e.code) && +e.code.slice(5) <= vids.length) setSound(+e.code.slice(5) - 1);
+});
+build(SETS[location.hash.slice(1)] ? location.hash.slice(1) : "wb");
+</script>
+</body>
+</html>
