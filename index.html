@@ -36,6 +36,13 @@
     .grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
     video, .wait { height: auto; width: 100%; }
   }
+  .foot { display: flex; align-items: center; justify-content: center; gap: 10px; }
+  button.fs { padding: 6px 12px; font-size: 13px; }
+  @media (max-width: 600px) {
+    .grid { grid-template-columns: 1fr !important; }
+    .head b { font-size: 16px; }
+    button.fs { padding: 10px 16px; font-size: 15px; }
+  }
 </style>
 </head>
 <body>
@@ -51,21 +58,21 @@
     <span id="clock">0.0 s</span>
   </div>
   <div class="grid" id="grid"></div>
-  <div class="help">Web copies (720×1280). Space = play / pause all · ← → = 1 second · 1-5 = hear that video · tap a video for its own controls</div>
+  <div class="help">Web copies (720×1280). Space = play / pause all · ← → = 1 second · 1-5 = hear that video · tap a video for its own controls · ⛶ Full screen plays that video full screen with its sound</div>
 <script>
 const SETS = {
   wb: { name: "Workbench drafts", vids: [
+    { file: "wb_E07_v3.mp4", title: "E07 Sand Barrels", ver: "workbench v3 · drunk-driver hook · real grip" },
     { file: "wb_E01.mp4", title: "E01 Cherenkov",    ver: "workbench · no VO yet" },
     { file: "wb_E04.mp4", title: "E04 Lake Nyos",    ver: "workbench" },
     { file: "wb_E05.mp4", title: "E05 Road Lines",   ver: "workbench · new car" },
     { file: "wb_E06.mp4", title: "E06 Bridge Ice",   ver: "workbench · with crash" },
-    { file: "wb_E07_v3.mp4", title: "E07 Sand Barrels", ver: "workbench v3 · drunk-driver hook · real grip" },
   ]},
   final: { name: "Final (Cycles)", vids: [
+    { file: "E07_Sand_Barrels.mp4", title: "E07 Sand Barrels", ver: "v1 · Oct 18" },
     { file: "E04_Lake_Nyos.mp4",    title: "E04 Lake Nyos",    ver: "v1 · Oct 18" },
     { file: "E05_Road_Lines.mp4",   title: "E05 Road Lines",   ver: "v3 · truck fixed" },
     { file: "E06_Bridge_Ice.mp4",   title: "E06 Bridge Ice",   ver: "v3 · daytime" },
-    { file: "E07_Sand_Barrels.mp4", title: "E07 Sand Barrels", ver: "v1 · Oct 18" },
   ]},
 };
 const grid = document.getElementById("grid"), soundBox = document.getElementById("sound");
@@ -81,11 +88,12 @@ function build(key) {
     const cell = document.createElement("div"); cell.className = "cell";
     cell.innerHTML = `<div class="head"><b>${v.title}</b><small>${v.ver}</small></div>
       <div class="vbox"><video src="${v.file}" controls preload="metadata" playsinline></video></div>
-      <div class="foot">–</div>`;
+      <div class="foot"><span class="dur">–</span><button class="fs" type="button">⛶ Full screen</button></div>`;
     grid.appendChild(cell);
-    const el = cell.querySelector("video"), foot = cell.querySelector(".foot");
+    const el = cell.querySelector("video"), foot = cell.querySelector(".foot"), dur = cell.querySelector(".dur");
+    cell.querySelector(".fs").onclick = () => goFull(i);
     const rec = { el, cell };
-    el.addEventListener("loadedmetadata", () => { foot.textContent = el.duration.toFixed(1) + " s"; });
+    el.addEventListener("loadedmetadata", () => { dur.textContent = el.duration.toFixed(1) + " s"; });
     el.addEventListener("error", () => {
       const w = document.createElement("div"); w.className = "wait"; w.textContent = "not uploaded yet";
       el.replaceWith(w); foot.textContent = v.file; rec.el = null;
@@ -95,6 +103,15 @@ function build(key) {
   });
   const off = document.createElement("button"); off.dataset.i = -1; off.textContent = "Off"; soundBox.appendChild(off);
   setSound(0);
+}
+function goFull(i) {
+  const v = vids[i]; if (!v || !v.el) return;
+  setSound(i); const el = v.el; el.muted = false;
+  const ios = () => { if (el.webkitEnterFullscreen) el.webkitEnterFullscreen(); };
+  if (el.requestFullscreen) el.requestFullscreen().catch(ios);
+  else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  else ios();
+  el.play().catch(() => {});
 }
 function live() { return vids.filter(v => v.el); }
 function setSound(i) {
